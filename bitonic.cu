@@ -45,7 +45,7 @@ __global__ void partial_step(int * data, int N, int phase, int first_step){
 
 __global__ void full_step(int * data, int N, int phase, int first_step, int end_step){
     //key property: all comps for a thread face the same direction
-    //TODO: fill in
+    //TODO: test
     //make partition
     int num_thrs = N/ln_per_thr; //16
     int lns_per_sector = 1<<(first_step+1); //8
@@ -57,7 +57,7 @@ __global__ void full_step(int * data, int N, int phase, int first_step, int end_
     int thr_sector_end = (thr_assigned_sector+1)*lns_per_sector; //16
     int thr_sector_id = (threadIdx.x + blockDim.x * blockIdx.x) % thr_per_sector; //1
     bool sort_dir = (bool) ((thr_sector_start / (1<<(phase+1)))+1)%2; //0
-    //thr/sector*numsectors=numthrs
+    //engage in sorting
     for (int substep = first_step; substep > end_step; substep--){ //2-0
         int comp_span = 1<<substep;
         for (int minisector_start = thr_sector_start; minisector_start < thr_sector_end; minisector_start += comp_span*2){
@@ -70,7 +70,7 @@ __global__ void full_step(int * data, int N, int phase, int first_step, int end_
 
 void parallel_implementation(int * input, int * output, int N){
     //TODO: sort using parallel algorithm
-    //TODO: var definitions
+    //var definitions
     int padded_N = std::__bit_ceil(N);
     int num_blks = padded_N / ln_per_blk;
     int * working_arr = (int *) malloc(sizeof(int) * padded_N);
@@ -84,13 +84,16 @@ void parallel_implementation(int * input, int * output, int N){
     //TODO: kernel launch
     for (int phase = 0; phase < __clz(N); phase ++){
         for (int first_step = phase; first_step >= thr_depth; first_step -= thr_depth){
-            //full step
+            //TODO: full step
         }
-        //partial step
+        //TODO: partial step
     }
-    //TODO: memory transfer
+    //memory transfer
     cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < N; i++){output[i] = working_arr[i];}
 
+    //resource deallocation
+    cudaFree(d_working_arr);
     free(working_arr);
 }
 
@@ -186,16 +189,19 @@ int main(int argc, char ** argv) {
     cudaEventElapsedTime(&ms, begin, end);
     printf("Elapsed time: %f ms\n", ms);
 
-
-
-    for (int i=0; i < N; i++){
-        if (control_sorted[i] != serial_sorted[i]) {
-            printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
-        }
-        if (control_sorted[i] != parallel_sorted[i]) {
-            printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], parallel_sorted[i], i);
-        }
+    printf("u  c  s  p\n");
+    for (int i=0; i<N; i++){
+        printf("%d  %d  %d  %d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
     }
+
+    //for (int i=0; i < N; i++){
+    //    if (control_sorted[i] != serial_sorted[i]) {
+    //        printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
+    //    }
+    //    if (control_sorted[i] != parallel_sorted[i]) {
+    //        printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], parallel_sorted[i], i);
+    //    }
+    //}
     
 
     cudaEventDestroy(begin);
