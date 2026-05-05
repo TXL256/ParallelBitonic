@@ -7,7 +7,7 @@
 #include <bitset>
 #include <limits.h>
 
-#include "util.h"
+#include "./util.h"
 
 const int ln_per_thr = 16; //2^4, lanes per thread; the number of items one thread is able to hold in cache
 const int thr_per_blk = 256; //2^8
@@ -82,7 +82,7 @@ void parallel_implementation(int * input, int * output, int N){
     for (int i = N; i < padded_N; i++){working_arr[i] = INT_MAX;}
     cudaMemcpy(d_working_arr, working_arr, sizeof(int) * padded_N, cudaMemcpyHostToDevice);
     //TODO: kernel launch
-    for (int phase = 0; phase < __clz(N); phase ++){
+    for (int phase = 0; phase < log2(N)-1; phase ++){
         for (int first_step = phase; first_step >= thr_depth; first_step -= thr_depth){
             //TODO: full step
         }
@@ -101,10 +101,8 @@ void parallel_implementation(int * input, int * output, int N){
 //start inclusive, end exclusive
 //direction: 0=descending, 1=ascending
 void comp_swap(int * data, int i1, int i2, bool direction){ 
-    if (!direction && i1<i2 || direction && i1>i2){
-        int temp = data[i1];
-        data[i1] = data[i2];
-        data[i2] = temp;
+    if (!direction && data[i1]<data[i2] || direction && data[i1]>data[i2]){
+        std::swap(data[i1], data[i2]);
     }
 }
 
@@ -112,10 +110,10 @@ void comp_swap(int * data, int i1, int i2, bool direction){
 void bitonic_merge(int * data, int start_i, int end_i, bool direction){
     int section_len = end_i-start_i;
     if (section_len <= 1) {return;}
-    for (int i = 0; i < section_len/2; i++){
-        comp_swap(data, i, i+section_len/2, direction);
-    }
     int mid_i = (start_i + end_i) / 2;
+    for (int i = start_i; i < mid_i; i++){
+        comp_swap(data, i, i+(section_len/2), direction);
+    }
     bitonic_merge(data, start_i, mid_i, direction);
     bitonic_merge(data, mid_i, end_i, direction);
 }
@@ -191,7 +189,7 @@ int main(int argc, char ** argv) {
 
     printf("u  c  s  p\n");
     for (int i=0; i<N; i++){
-        printf("%d  %d  %d  %d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
+        printf("%d  %d  %d\n", data[i], control_sorted[i], serial_sorted[i]);
     }
 
     //for (int i=0; i < N; i++){
