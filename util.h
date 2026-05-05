@@ -3,7 +3,6 @@
 
 
 int * read_file(char * name, int * len) {
-    printf("filename: %s", name);
     std::ifstream infile(name);
 
     infile >> *len;

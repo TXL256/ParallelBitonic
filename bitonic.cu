@@ -17,7 +17,7 @@ const int blk_depth = 8;
 
 //1=ascending
 __device__ void thr_comp_swap(int * data, int N, int i1, int i2, bool direction){
-    if (!direction && i1<i2 || direction && i1>i2){
+    if (!direction && data[i1]<data[i2] || direction && data[i1]>data[i2]){
         int temp = data[i1];
         data[i1] = data[i2];
         data[i2] = temp;
@@ -31,8 +31,8 @@ __global__ void partial_step(int * data, int N, int phase, int first_step){
     int thr_end_i = thr_start_i + ln_per_thr; //exclusive
     int dir_sector_size = 1<<(phase+1);
     for (int dir_sector_start = thr_start_i; dir_sector_start < thr_end_i; dir_sector_start+=dir_sector_size){
-        bool sort_dir = (bool) ((dir_sector_start/dir_sector_size)+1)%2;
-        for (int substep = first_step; first_step >= 0; first_step--){
+        bool sort_dir = ((dir_sector_start/dir_sector_size)&1)==0;
+        for (int substep = first_step; substep >= 0; substep--){
             int comp_span = 1<<substep;
             for (int minisector_start = dir_sector_start; minisector_start < (dir_sector_start+dir_sector_size); minisector_start += comp_span*2){
                 for (int i = minisector_start; i < (minisector_start+comp_span); i++){
@@ -72,6 +72,7 @@ void parallel_implementation(int * input, int * output, int N){
     //TODO: sort using parallel algorithm
     //var definitions
     int padded_N = std::__bit_ceil(N);
+    if (padded_N < ln_per_blk){padded_N = ln_per_blk;}
     int num_blks = padded_N / ln_per_blk;
     int * working_arr = (int *) malloc(sizeof(int) * padded_N);
     //device mem allocate
@@ -81,12 +82,25 @@ void parallel_implementation(int * input, int * output, int N){
     for (int i = 0; i < N; i++){working_arr[i] = input[i];}
     for (int i = N; i < padded_N; i++){working_arr[i] = INT_MAX;}
     cudaMemcpy(d_working_arr, working_arr, sizeof(int) * padded_N, cudaMemcpyHostToDevice);
-    //TODO: kernel launch
-    for (int phase = 0; phase < log2(N)-1; phase ++){
-        for (int first_step = phase; first_step >= thr_depth; first_step -= thr_depth){
+    //TODO: kernel launch, change phase bound back to log2(N)!!!!!!
+    for (int phase = 0; phase < 3; phase ++){
+        for (int first_step = phase; first_step >= thr_depth-1; first_step -= thr_depth){
             //TODO: full step
+            full_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, first_step, first_step-thr_depth);
+            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
+            printf("after full step p%d s%d: ", phase, first_step);
+            for (int i = 0; i < N; i++){printf("%d ", working_arr[i]);}
+            printf("\n");
         }
         //TODO: partial step
+        if ((phase+1)%thr_depth!=0) {
+            partial_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, phase%thr_depth);
+            
+            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
+            printf("after partial step p%d s%d: ", phase, phase%thr_depth);
+            for (int i = 0; i < N; i++){printf("%d ", working_arr[i]);}
+            printf("\n");
+        }
     }
     //memory transfer
     cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
@@ -187,10 +201,10 @@ int main(int argc, char ** argv) {
     cudaEventElapsedTime(&ms, begin, end);
     printf("Elapsed time: %f ms\n", ms);
 
-    printf("u  c  s  p\n");
-    for (int i=0; i<N; i++){
-        printf("%d  %d  %d\n", data[i], control_sorted[i], serial_sorted[i]);
-    }
+    //printf("u  c  s  p\n");
+    //for (int i=0; i<N; i++){
+    //    printf("%d  %d  %d %d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
+    //}
 
     //for (int i=0; i < N; i++){
     //    if (control_sorted[i] != serial_sorted[i]) {
