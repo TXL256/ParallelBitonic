@@ -34,7 +34,7 @@ __global__ void partial_step(int * data, int N, int phase, int first_step){
         bool sort_dir = ((dir_sector_start/dir_sector_size)&1)==0;
         for (int substep = first_step; substep >= 0; substep--){
             int comp_span = 1<<substep;
-            for (int minisector_start = dir_sector_start; minisector_start < (dir_sector_start+dir_sector_size); minisector_start += comp_span*2){
+            for (int minisector_start = dir_sector_start; minisector_start < (dir_sector_start+dir_sector_size) && minisector_start < thr_end_i; minisector_start += comp_span*2){
                 for (int i = minisector_start; i < (minisector_start+comp_span); i++){
                     thr_comp_swap(data, N, i, i+comp_span, sort_dir);
                 }
@@ -47,16 +47,17 @@ __global__ void full_step(int * data, int N, int phase, int first_step, int end_
     //key property: all comps for a thread face the same direction
     //TODO: test
     //make partition
-    int num_thrs = N/ln_per_thr; //16
-    int lns_per_sector = 1<<(first_step+1); //8
-    int thr_per_sector = lns_per_sector/ln_per_thr; //2
-    int num_sectors = N/lns_per_sector; //8
-    int thr_assigned_sector = (threadIdx.x + blockDim.x * blockIdx.x) / thr_per_sector; //1
-    int thr_spacing = thr_per_sector; //2
-    int thr_sector_start = thr_assigned_sector * lns_per_sector; //8
-    int thr_sector_end = (thr_assigned_sector+1)*lns_per_sector; //16
-    int thr_sector_id = (threadIdx.x + blockDim.x * blockIdx.x) % thr_per_sector; //1
-    bool sort_dir = (bool) ((thr_sector_start / (1<<(phase+1)))+1)%2; //0
+    //if ((threadIdx.x + blockDim.x * blockIdx.x)>=4 || (threadIdx.x + blockDim.x * blockIdx.x)<2){return;}
+    int num_thrs = N/ln_per_thr; 
+    int lns_per_sector = 1<<(first_step+1);
+    int thr_per_sector = lns_per_sector/ln_per_thr;
+    int num_sectors = N/lns_per_sector; 
+    int thr_assigned_sector = (threadIdx.x + blockDim.x * blockIdx.x) / thr_per_sector; 
+    int thr_spacing = thr_per_sector; 
+    int thr_sector_start = thr_assigned_sector * lns_per_sector; 
+    int thr_sector_end = (thr_assigned_sector+1)*lns_per_sector; 
+    int thr_sector_id = (threadIdx.x + blockDim.x * blockIdx.x) % thr_per_sector;
+    bool sort_dir = ((thr_sector_start/(thr_sector_end-thr_sector_start))&1)==0;
     //engage in sorting
     for (int substep = first_step; substep > end_step; substep--){ //2-0
         int comp_span = 1<<substep;
@@ -83,23 +84,14 @@ void parallel_implementation(int * input, int * output, int N){
     for (int i = N; i < padded_N; i++){working_arr[i] = INT_MAX;}
     cudaMemcpy(d_working_arr, working_arr, sizeof(int) * padded_N, cudaMemcpyHostToDevice);
     //TODO: kernel launch, change phase bound back to log2(N)!!!!!!
-    for (int phase = 0; phase < 3; phase ++){
+    for (int phase = 0; phase < log2(N); phase ++){
         for (int first_step = phase; first_step >= thr_depth-1; first_step -= thr_depth){
             //TODO: full step
             full_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, first_step, first_step-thr_depth);
-            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
-            printf("after full step p%d s%d: ", phase, first_step);
-            for (int i = 0; i < N; i++){printf("%d ", working_arr[i]);}
-            printf("\n");
         }
         //TODO: partial step
         if ((phase+1)%thr_depth!=0) {
             partial_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, phase%thr_depth);
-            
-            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
-            printf("after partial step p%d s%d: ", phase, phase%thr_depth);
-            for (int i = 0; i < N; i++){printf("%d ", working_arr[i]);}
-            printf("\n");
         }
     }
     //memory transfer
@@ -201,19 +193,21 @@ int main(int argc, char ** argv) {
     cudaEventElapsedTime(&ms, begin, end);
     printf("Elapsed time: %f ms\n", ms);
 
-    //printf("u  c  s  p\n");
-    //for (int i=0; i<N; i++){
-    //    printf("%d  %d  %d %d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
-    //}
-
-    //for (int i=0; i < N; i++){
-    //    if (control_sorted[i] != serial_sorted[i]) {
-    //        printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
-    //    }
-    //    if (control_sorted[i] != parallel_sorted[i]) {
-    //        printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], parallel_sorted[i], i);
-    //    }
-    //}
+    if (N <= 64){
+        printf("u  c  s  p\n");
+        for (int i=0; i<N; i++){
+            printf("%-2d %-2d %-2d %-2d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
+        }
+    } else {
+        for (int i=0; i < N; i++){
+            if (control_sorted[i] != serial_sorted[i]) {
+                printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
+            }
+            if (control_sorted[i] != parallel_sorted[i]) {
+                printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], parallel_sorted[i], i);
+            }
+        }
+    }
     
 
     cudaEventDestroy(begin);

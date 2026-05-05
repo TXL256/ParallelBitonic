@@ -7,3 +7,6 @@ To use:
 2. run on terminal:
 make all
 ./bitonic_opt ./data/<yourfilename>
+
+There exist a few data files I created myself as a demo.
+Also I worked 'till 4AM on Monday(?) night to get this done; not sure I'll feel too good for the presentation. I feel dead. Have a nice week.
