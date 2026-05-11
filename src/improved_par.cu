@@ -16,25 +16,21 @@ const int ln_per_blk = ln_per_thr * thr_per_blk;
 const int thr_depth = 4;
 const int blk_depth = 8;
 
-//1=ascending
-__device__ void thr_comp_swap(int * data, int N, int i1, int i2, bool direction){
-    if (!direction && data[i1]<data[i2] || direction && data[i1]>data[i2]){
-        int temp = data[i1];
-        data[i1] = data[i2];
-        data[i2] = temp;
-    }
-}
-
-__device__ void full_thr_dive(){
+__device__ void full_thr_dive(int * data, int N, int phase, int blk_first_step, int thr_first_step){
 
 }
 
-__device__ void part_thr_dive(){
+__device__ void part_thr_dive(int * data, int N, int phase, int blk_first_step, int thr_first_step){
 
 }
 
-__global__ void blk_dive(int * data, int N, int phase, int first_step){
-    
+__global__ void full_blk_dive(int * data, int N, int phase, int first_step){
+    //full block dive property: direction is always uniform across a block
+
+}
+
+__global__ void part_blk_dive(int * data, int N, int phase, int first_step){
+    //partial block dive property: block spacing is always 1
 }
 
 void blk_parallel_implementation(int * input, int * output, int N){
@@ -52,9 +48,11 @@ void blk_parallel_implementation(int * input, int * output, int N){
     cudaMemcpy(d_working_arr, working_arr, sizeof(int) * padded_N, cudaMemcpyHostToDevice);
     //TODO: kernel launch, change phase bound back to log2(N)!!!!!!
     for (int phase = 0; phase < log2(padded_N); phase++){
-        for (int step = phase; step >= 0; step -= blk_depth){
-            //launch block dive
-            blk_dive<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, step);
+        for (int step = phase; step >= blk_depth-1; step -= blk_depth){
+            full_blk_dive<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, step);
+        }
+        if ((phase+1)%blk_depth!=0){
+            part_blk_dive<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, phase%blk_depth);
         }
     }
 
