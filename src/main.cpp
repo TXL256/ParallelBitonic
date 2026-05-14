@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <cmath>
 #include <limits.h>
+#include <random>
+#include <ctime>
 
 #include "../include/utils.h"
 #include "../include/base_par.cuh"
@@ -76,8 +78,20 @@ int main(int argc, char ** argv) {
     
     int N;
 
-    assert(argc == 2);
-    int * data = read_file(argv[1], &N);
+    assert(argc == 3);
+    int * data;
+    if (argv[1][1] == 'n'){
+        N = std::stoi(argv[2]);
+        data = (int *) malloc(sizeof(int) * N);
+        std::srand(std::time(0));
+        for (int i = 0; i < N; i++){
+        data[i] = std::rand() % 100;
+        }
+    }
+    else if (argv[1][1] == 'f')
+    {
+        data = read_file(argv[2], &N);
+    }
 
     cudaStream_t stream;
     cudaEvent_t begin, end;
