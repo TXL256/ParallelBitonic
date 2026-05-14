@@ -17,7 +17,7 @@ const int thr_depth = 4;
 
 __device__ void thr_comp_swap(int * data, int N, int i1, int i2, bool direction){
     if (i1 >= N || i2 >= N){
-        printf("Err: tried to compare outside array bounds");
+        printf("Err: tried to compare outside array bounds\n");
     }
     if (!direction && data[i1]<data[i2] || direction && data[i1]>data[i2]){
         int temp = data[i1];
@@ -84,34 +84,18 @@ void thr_parallel_implementation(int * input, int * output, int N){
     for (int i = 0; i < N; i++){working_arr[i] = input[i];}
     for (int i = N; i < padded_N; i++){working_arr[i] = INT_MAX;}
     cudaMemcpy(d_working_arr, working_arr, sizeof(int) * padded_N, cudaMemcpyHostToDevice);
-    //TODO: kernel launches
-    
-    printf("starting:                ");
-    for (int i = 0; i < N; i++){
-        printf("%d ", working_arr[i]);
-    }
-    printf("\n");
 
+    //TODO: kernel launches
     for (int phase = 0; phase < log2(N); phase++){
         for (int first_step = phase; first_step >= thr_depth-1; first_step -= thr_depth){
             //TODO: full step
             full_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, first_step, first_step-thr_depth);
             cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
-            printf("after full step %d, %d: ", phase, first_step);
-            for (int i = 0; i < N; i++){
-                printf("%d ", working_arr[i]);
-            }
-            printf("\n");
         }
         //TODO: partial step
         if ((phase+1)%thr_depth!=0) {
             partial_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, phase%thr_depth);
             cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
-            printf("after partial step %d, %d: ", phase, phase%thr_depth);
-            for (int i = 0; i < N; i++){
-                printf("%d ", working_arr[i]);
-            }
-            printf("\n");
         }
         
         

@@ -10,6 +10,7 @@
 
 #include "../include/utils.h"
 #include "../include/base_par.cuh"
+#include "../include/improved_par.cuh"
 
 //inplace
 //start inclusive, end exclusive
@@ -96,15 +97,18 @@ int main(int argc, char ** argv) {
     int * second_parallel_sorted = (int*) malloc(sizeof(int) * N);
     thr_parallel_implementation(data, second_parallel_sorted, N);
 
+    int * third_parallel_sorted = (int*) malloc(sizeof(int) * N);
+    blk_parallel_implementation(data, third_parallel_sorted, N);
+
     cudaStreamSynchronize(stream);
     float ms;
     cudaEventElapsedTime(&ms, begin, end);
     printf("Elapsed time: %f ms\n", ms);
 
     if (N <= 64){
-        printf("u  c  s  p\n");
+        printf("u  c  s  p2 p3 \n");
         for (int i=0; i<N; i++){
-            printf("%-2d %-2d %-2d %-2d\n", data[i], control_sorted[i], serial_sorted[i], second_parallel_sorted[i]);
+            printf("%-2d %-2d %-2d %-2d %-2d\n", data[i], control_sorted[i], serial_sorted[i], second_parallel_sorted[i], third_parallel_sorted[i]);
         }
     } else {
         for (int i=0; i < N; i++){
@@ -112,7 +116,10 @@ int main(int argc, char ** argv) {
                 printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
             }
             if (control_sorted[i] != second_parallel_sorted[i]) {
-                printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], second_parallel_sorted[i], i);
+                printf("ERROR; thr-par incorrect: %d != %d @ %d\n", control_sorted[i], second_parallel_sorted[i], i);
+            }
+            if (control_sorted[i] != third_parallel_sorted[i]) {
+                printf("ERROR; blk-par incorrect: %d != %d @ %d\n", control_sorted[i], third_parallel_sorted[i], i);
             }
         }
     }
@@ -127,6 +134,7 @@ int main(int argc, char ** argv) {
     free(control_sorted);
     free(serial_sorted);
     free(second_parallel_sorted);
+    free(third_parallel_sorted);
 
     return 0;
 }
