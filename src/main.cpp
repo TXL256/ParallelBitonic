@@ -11,8 +11,6 @@
 #include "../include/utils.h"
 #include "../include/base_par.cuh"
 
-
-
 //inplace
 //start inclusive, end exclusive
 //direction: 0=descending, 1=ascending
@@ -95,8 +93,8 @@ int main(int argc, char ** argv) {
     int * serial_sorted = (int*) malloc(sizeof(int) * N);
     serial_implementation(data, serial_sorted, N);
 
-    int * parallel_sorted = (int*) malloc(sizeof(int) * N);
-    thr_parallel_implementation(data, parallel_sorted, N);
+    int * second_parallel_sorted = (int*) malloc(sizeof(int) * N);
+    thr_parallel_implementation(data, second_parallel_sorted, N);
 
     cudaStreamSynchronize(stream);
     float ms;
@@ -106,15 +104,15 @@ int main(int argc, char ** argv) {
     if (N <= 64){
         printf("u  c  s  p\n");
         for (int i=0; i<N; i++){
-            printf("%-2d %-2d %-2d %-2d\n", data[i], control_sorted[i], serial_sorted[i], parallel_sorted[i]);
+            printf("%-2d %-2d %-2d %-2d\n", data[i], control_sorted[i], serial_sorted[i], second_parallel_sorted[i]);
         }
     } else {
         for (int i=0; i < N; i++){
             if (control_sorted[i] != serial_sorted[i]) {
                 printf("ERROR; serial incorrect: %d != %d @ %d\n", control_sorted[i], serial_sorted[i], i);
             }
-            if (control_sorted[i] != parallel_sorted[i]) {
-                printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], parallel_sorted[i], i);
+            if (control_sorted[i] != second_parallel_sorted[i]) {
+                printf("ERROR; parallel incorrect: %d != %d @ %d\n", control_sorted[i], second_parallel_sorted[i], i);
             }
         }
     }
@@ -128,7 +126,7 @@ int main(int argc, char ** argv) {
     free(data);
     free(control_sorted);
     free(serial_sorted);
-    free(parallel_sorted);
+    free(second_parallel_sorted);
 
     return 0;
 }

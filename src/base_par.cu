@@ -8,15 +8,17 @@
 #include <bitset>
 #include <limits.h>
 
-#include "../include/base_par.cuh"
+#include "../include/utils.h"
 
 const int ln_per_thr = 16; //2^4, lanes per thread; the number of items one thread is able to hold in cache
 const int thr_per_blk = 256; //2^8
 const int ln_per_blk = ln_per_thr * thr_per_blk;
 const int thr_depth = 4;
 
-//1=ascending
 __device__ void thr_comp_swap(int * data, int N, int i1, int i2, bool direction){
+    if (i1 >= N || i2 >= N){
+        printf("Err: tried to compare outside array bounds");
+    }
     if (!direction && data[i1]<data[i2] || direction && data[i1]>data[i2]){
         int temp = data[i1];
         data[i1] = data[i2];
@@ -28,16 +30,16 @@ __global__ void partial_step(int * data, int N, int phase, int first_step){
     //key property of partial steps: threads operate on continuous areas
     //TODO: test
     int thr_id = threadIdx.x + blockDim.x * blockIdx.x;
-    int thr_start_i = ln_per_thr * (threadIdx.x + blockDim.x * blockIdx.x); //inclusive
-        int thr_end_i = thr_start_i + ln_per_thr; //exclusive
-        int dir_sector_size = 1<<(phase+1);
-        for (int dir_sector_start = thr_start_i; dir_sector_start < thr_end_i; dir_sector_start+=dir_sector_size){
-                bool sort_dir = ((dir_sector_start/dir_sector_size)&1)==0;
-                for (int substep = first_step; substep >= 0; substep--){
-                        int comp_span = 1<<substep;
-                        for (int minisector_start = dir_sector_start; minisector_start < (dir_sector_start+dir_sector_size) && minisector_start < thr_end_i; minisector_start += comp_span*2){
-                                for (int i = minisector_start; i < (minisector_start+comp_span); i++){
-                                        thr_comp_swap(data, N, i, i+comp_span, sort_dir);
+    int thr_start_i = ln_per_thr * thr_id; //inclusive
+    int thr_end_i = thr_start_i + ln_per_thr; //exclusive
+    int dir_sector_size = 1<<(phase+1);
+    for (int dir_sector_start = thr_start_i; dir_sector_start < thr_end_i; dir_sector_start+=dir_sector_size){
+        bool sort_dir = ((dir_sector_start/dir_sector_size)&1)==0;
+        for (int substep = first_step; substep >= 0; substep--){
+            int comp_span = 1<<substep;
+            for (int minisector_start = dir_sector_start; minisector_start < (dir_sector_start+dir_sector_size) && minisector_start < thr_end_i; minisector_start += comp_span*2){
+                for (int i = minisector_start; i < (minisector_start+comp_span); i++){
+                    thr_comp_swap(data, N, i, i+comp_span, sort_dir);
                 }
             }
         }
@@ -50,20 +52,20 @@ __global__ void full_step(int * data, int N, int phase, int first_step, int end_
     //make partition
     //if ((threadIdx.x + blockDim.x * blockIdx.x)>=4 || (threadIdx.x + blockDim.x * blockIdx.x)<2){return;}
     int thr_id = (threadIdx.x + blockDim.x * blockIdx.x);
-        int lns_per_sector = 1<<(first_step+1);
-        int thr_per_sector = lns_per_sector/ln_per_thr;
-        int thr_assigned_sector = thr_id / thr_per_sector; 
-        int thr_spacing = thr_per_sector; 
-        int thr_sector_start = thr_assigned_sector * lns_per_sector; 
-        int thr_sector_end = (thr_assigned_sector+1)*lns_per_sector; 
-        int thr_sector_id = thr_id % thr_per_sector;
-        bool sort_dir = !((bool) ((thr_sector_start/(1<<(phase+1)))%2));
-        //engage in sorting
+    int lns_per_sector = 1<<(first_step+1);
+    int thr_per_sector = lns_per_sector/ln_per_thr;
+    int thr_assigned_sector = thr_id / thr_per_sector; 
+    int thr_spacing = thr_per_sector; 
+    int thr_sector_start = thr_assigned_sector * lns_per_sector; 
+    int thr_sector_end = (thr_assigned_sector+1)*lns_per_sector; 
+    int thr_sector_id = thr_id % thr_per_sector;
+    bool sort_dir = !((bool) ((thr_sector_start/(1<<(phase+1)))%2));
+    //engage in sorting
     for (int substep = first_step; substep > end_step; substep--){ //2-0
-                int comp_span = 1<<substep;
-                for (int minisector_start = thr_sector_start; minisector_start < thr_sector_end; minisector_start += comp_span*2){
-                        for (int i = minisector_start+thr_sector_id; i < (minisector_start+comp_span); i += thr_spacing){
-                                thr_comp_swap(data, N, i, i+comp_span, sort_dir);
+        int comp_span = 1<<substep;
+        for (int minisector_start = thr_sector_start; minisector_start < thr_sector_end; minisector_start += comp_span*2){
+            for (int i = minisector_start+thr_sector_id; i < (minisector_start+comp_span); i += thr_spacing){
+                thr_comp_swap(data, N, i, i+comp_span, sort_dir);
             }
         }
     }
