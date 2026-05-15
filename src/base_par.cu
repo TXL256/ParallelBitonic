@@ -90,15 +90,11 @@ void thr_parallel_implementation(int * input, int * output, int N){
         for (int first_step = phase; first_step >= thr_depth-1; first_step -= thr_depth){
             //TODO: full step
             full_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, first_step, first_step-thr_depth);
-            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
         }
         //TODO: partial step
         if ((phase+1)%thr_depth!=0) {
             partial_step<<<(padded_N/ln_per_blk), thr_per_blk>>>(d_working_arr, padded_N, phase, phase%thr_depth);
-            cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);
         }
-        
-        
     }
     //memory transfer
     cudaMemcpy(working_arr, d_working_arr, sizeof(int) * padded_N, cudaMemcpyDeviceToHost);

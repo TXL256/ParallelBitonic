@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <random>
 #include <ctime>
+#include <chrono>
 
 #include "../include/utils.h"
 #include "../include/base_par.cuh"
@@ -87,6 +88,7 @@ int main(int argc, char ** argv) {
         for (int i = 0; i < N; i++){
         data[i] = std::rand() % 100;
         }
+        printf("data generated.\n");
     }
     else if (argv[1][1] == 'f')
     {
@@ -101,23 +103,40 @@ int main(int argc, char ** argv) {
 
 
     //TODO: sort using imported algorithm
+    auto begin_t = std::chrono::steady_clock::now();
     int * control_sorted = (int*) malloc(sizeof(int) * N);
     control_implementation(data, control_sorted, N);
+    auto end_t = std::chrono::steady_clock::now();
+    float control_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
 
     //TODO: sort using serial algorithm
+    begin_t = std::chrono::steady_clock::now();
     int * serial_sorted = (int*) malloc(sizeof(int) * N);
     serial_implementation(data, serial_sorted, N);
+    end_t = std::chrono::steady_clock::now();
+    float serial_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_t-begin_t).count();
 
+    cudaEventRecord(begin, stream);
     int * second_parallel_sorted = (int*) malloc(sizeof(int) * N);
     thr_parallel_implementation(data, second_parallel_sorted, N);
+    cudaEventRecord(end, stream);
+    cudaEventSynchronize(end);
+    float second_par_ms;
+    cudaEventElapsedTime(&second_par_ms, begin, end);
 
+    cudaEventRecord(begin, stream);
     int * third_parallel_sorted = (int*) malloc(sizeof(int) * N);
     blk_parallel_implementation(data, third_parallel_sorted, N);
+    cudaEventRecord(end, stream);
+    cudaEventSynchronize(end);
+    float third_par_ms;
+    cudaEventElapsedTime(&third_par_ms, begin, end);
 
     cudaStreamSynchronize(stream);
-    float ms;
-    cudaEventElapsedTime(&ms, begin, end);
-    printf("Elapsed time: %f ms\n", ms);
+    printf("control time: %f ms\n", control_ms);
+    printf("serial time: %f ms\n", serial_ms);
+    printf("second_par time: %f ms\n", second_par_ms);
+    printf("third_par time: %f ms\n", third_par_ms);
 
     if (N <= 64){
         printf("u  c  s  p2 p3 \n");

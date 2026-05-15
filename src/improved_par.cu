@@ -11,7 +11,7 @@
 #include "../include/utils.h"
 
 //TODO: change back to proper numbers
-const int thr_depth = 2;
+const int thr_depth = 4;
 const int blk_depth = 2*thr_depth;
 const int ln_per_thr = 1<<thr_depth; //2^4, lanes per thread; the number of items one thread is able to hold in cache
 const int ln_per_blk = 1<<blk_depth;
